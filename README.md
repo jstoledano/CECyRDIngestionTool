@@ -17,7 +17,7 @@ To get started with this CSV processing and database loading script, follow thes
 
 1. **Clone the Repository**: 
    ```shell
-   git clone https://github.com/yourusername/your-repo-name.git
+   git clone https://github.com/jstoledano/CECyRDIngestionTool.git
    ```
 
 2. **Run the Script**:
@@ -55,6 +55,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 This project was developed to simplify the process of cleaning and loading CSV data into a database using the Go programming language.
 
 Happy Coding!
-```
-
-Please replace `"yourusername/your-repo-name"` with the actual repository URL and customize the content as needed.
