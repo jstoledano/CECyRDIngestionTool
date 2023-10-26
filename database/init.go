@@ -23,15 +23,15 @@ func InitDB() (*gorm.DB, error) {
 		if _, err := os.Stat("cecyrd.db"); os.IsNotExist(err) {
 			db, err = gorm.Open(sqlite.Open("cecyrd.db"), &gorm.Config{})
 			if err != nil {
-				panic("failed to connect database", err)
-				return nil, err
+				log.Println("failed to connect database", err)
+				return
 			}
 			log.Println("Database created")
 		} else {
 			db, err = gorm.Open(sqlite.Open("cecyrd.db"), &gorm.Config{})
 			if err != nil {
-				panic("failed to connect database", err)
-				return nil, err
+				log.Println("failed to connect database", err)
+				return
 			}
 			log.Println("Database connected")
 		}

@@ -8,7 +8,7 @@ import (
 
 type Record struct {
 	gorm.Model
-	Folio                             string `gorm:"primaryKey"`
+	Folio                             string `gorm:"primaryKey;index"`
 	Estatus                           string
 	CausaRechazo                      string
 	MovimientoSolicitado              string
