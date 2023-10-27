@@ -1,31 +1,39 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/csv"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"text/template"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
+	"github.com/jackc/pgx/v5"
 	"github.com/jstoledano/CECyRDIngestionTool/database"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 func main() {
-	db, err := database.InitDB()
+	conn, err := pgx.Connect(context.Background(), os.Getenv("PGX"))
 	if err != nil {
-		log.Fatal(err)
+		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
+		os.Exit(1)
 	}
+	defer conn.Close(context.Background())
 
-	err = database.InitTables(db)
+	var conteo string
+	err = conn.QueryRow(context.Background(), "SELECT COUNT(*) FROM tramites").Scan(&conteo)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Fprintf(os.Stderr, "QueryRow failed: %v\n", err)
+		os.Exit(1)
 	}
+	fmt.Println("Actualmente, existen ", conteo, "trámites en la base de datos")
 
 	// Open the csv file
-	f, err := os.Open("data/01.Trámites_Tlax_01Septiembre-30Noviembre2021.txt")
+	f, err := os.Open("data/05.Trámites_Tlax_01enero_31marzo2022.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -42,8 +50,9 @@ func main() {
 	log.Println("Processing", len(data), "records")
 	bar := pb.StartNew(len(data))
 	start := time.Now()
+
 	for _, row := range data {
-		t := database.Record{}
+		t := database.Tramite{}
 		t.Folio = row[0]
 		t.Estatus = row[1]
 		t.CausaRechazo = row[2]
@@ -72,56 +81,61 @@ func main() {
 		t.TramoEntrega = t.FechaCpvEntregada.Sub(t.FechaCpvDisponible)
 		t.TramoExitoso = t.FechaExitoso.Sub(t.FechaTramite)
 
-		err := upsertRecord(db, t)
-		bar.Increment()
+		_, err = conn.Exec(context.Background(),
+			`INSERT INTO tramites 
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27) ON CONFLICT (folio) DO UPDATE SET 
+				estatus = $2, 
+				causa_rechazo = $3, 
+				movimiento_solicitado = $4, 
+				movimiento_definitivo = $5, 
+				fecha_tramite = $6, 
+				fecha_recibido_cecyrd = $7, 
+				fecha_registrado_cecyrd = $8, 
+				fecha_rechazado = $9, 
+				fecha_cancelado_movimiento_posterior = $10, 
+				fecha_alta_pe = $11, 
+				fecha_afectacion_padron = $12, 
+				fecha_actualizacion_pe = $13, 
+				fecha_reincorporacion_pe = $14, 
+				fecha_exitoso = $15, 
+				fecha_lote_produccion = $16, 
+				fecha_listo_reimpresion = $17, 
+				fecha_cpv_creada = $18, 
+				fecha_cpv_registrada_mac = $19, 
+				fecha_cpv_disponible = $20, 
+				fecha_cpv_entregada = $21, 
+				fecha_afectacion_ln = $22,
+				 distrito = $23, 
+				 mac = $24, 
+				 tramo_disponible = $25, 
+				 tramo_entrega = $26, 
+				 tramo_exitoso = $27`,
+			t.Folio, t.Estatus, t.CausaRechazo, t.MovimientoSolicitado, t.MovimientoDefinitivo,
+			t.FechaTramite, t.FechaRecibidoCecyrd, t.FechaRegistradoCecyrd, t.FechaRechazado, t.FechaCanceladoMovimientoPosterior,
+			t.FechaAltaPe, t.FechaAfectacionPadron, t.FechaActualizacionPe, t.FechaReincorporacionPe, t.FechaExitoso,
+			t.FechaLoteProduccion, t.FechaListoReimpresion, t.FechaCpvCreada, t.FechaCpvRegistradaMac, t.FechaCpvDisponible,
+			t.FechaCpvEntregada, t.FechaAfectacionLn, t.Distrito, t.Mac, t.TramoDisponible,
+			t.TramoEntrega, t.TramoExitoso)
 		if err != nil {
-			log.Fatal("Error al procesar ", t.Folio, " -- ", err)
+			log.Fatal(err)
 		}
+		bar.Increment()
 	}
 	defer f.Close()
 
 	bar.Finish()
 	end := time.Now()
-
 	log.Println("Time elapsed:", end.Sub(start))
 }
 
-func upsertRecord(db *gorm.DB, t database.Record) error {
-	tx := db.Begin()
-
-	if err := tx.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "folio"}},
-		DoUpdates: clause.Assignments(map[string]interface{}{
-			"estatus":                              t.Estatus,
-			"causa_rechazo":                        t.CausaRechazo,
-			"movimiento_solicitado":                t.MovimientoSolicitado,
-			"movimiento_definitivo":                t.MovimientoDefinitivo,
-			"fecha_tramite":                        t.FechaTramite,
-			"fecha_recibido_cecyrd":                t.FechaRecibidoCecyrd,
-			"fecha_registrado_cecyrd":              t.FechaRegistradoCecyrd,
-			"fecha_rechazado":                      t.FechaRechazado,
-			"fecha_cancelado_movimiento_posterior": t.FechaCanceladoMovimientoPosterior,
-			"fecha_alta_pe":                        t.FechaAltaPe,
-			"fecha_afectacion_padron":              t.FechaAfectacionPadron,
-			"fecha_actualizacion_pe":               t.FechaActualizacionPe,
-			"fecha_reincorporacion_pe":             t.FechaReincorporacionPe,
-			"fecha_exitoso":                        t.FechaExitoso,
-			"fecha_lote_produccion":                t.FechaLoteProduccion,
-			"fecha_listo_reimpresion":              t.FechaListoReimpresion,
-			"fecha_cpv_creada":                     t.FechaCpvCreada,
-			"fecha_cpv_registrada_mac":             t.FechaCpvRegistradaMac,
-			"fecha_cpv_disponible":                 t.FechaCpvDisponible,
-			"fecha_cpv_entregada":                  t.FechaCpvEntregada,
-			"fecha_afectacion_ln":                  t.FechaAfectacionLn,
-			"distrito":                             t.Distrito,
-			"mac":                                  t.Mac,
-			"tramo_disponible":                     t.TramoDisponible,
-			"tramo_entrega":                        t.TramoEntrega,
-			"tramo_exitoso":                        t.TramoExitoso}),
-	}).Create(&t).Error; err != nil {
-		tx.Rollback()
-		log.Println("Error al procesar ", t.Folio, " -- ", err)
+func slqSentence(format string, tramite database.Tramite) (string, error) {
+	t, err := template.New("fstring").Parse(format)
+	if err != nil {
+		return "", fmt.Errorf("error creating template: %v", err)
 	}
-	tx.Commit()
-	return nil
+	output := new(bytes.Buffer)
+	if err := t.Execute(output, tramite); err != nil {
+		return "", fmt.Errorf("error executing template: %v", err)
+	}
+	return output.String(), nil
 }

@@ -2,12 +2,9 @@ package database
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
-type Record struct {
-	gorm.Model
+type Tramite struct {
 	Folio                             string `gorm:"primaryKey;index;unique"`
 	Estatus                           string
 	CausaRechazo                      string
@@ -30,8 +27,8 @@ type Record struct {
 	FechaCpvDisponible                time.Time
 	FechaCpvEntregada                 time.Time
 	FechaAfectacionLn                 time.Time
-	Distrito                          int    `gorm:"not null"`
-	Mac                               string `gorm:"type:varchar(6);collate:pg_catalog.default;not null"`
+	Distrito                          int
+	Mac                               string
 	TramoDisponible                   time.Duration
 	TramoEntrega                      time.Duration
 	TramoExitoso                      time.Duration
