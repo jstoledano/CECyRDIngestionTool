@@ -1,14 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/csv"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
-	"text/template"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
@@ -32,11 +31,30 @@ func main() {
 	}
 	fmt.Println("Actualmente, existen ", conteo, "trámites en la base de datos")
 
-	// Open the csv file
-	f, err := os.Open("data/05.Trámites_Tlax_01enero_31marzo2022.txt")
+	directoryPath := "./data"
+	dir, err := os.ReadDir(directoryPath)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Error al leer el directorio:", err)
+		return
 	}
+	fmt.Println("Archivos en el directorio:")
+	for _, entry := range dir {
+		if entry.IsDir() {
+			fmt.Println("Directorio:", entry.Name())
+		} else {
+			fmt.Println("Archivo:", entry.Name())
+			fullPath := filepath.Join(directoryPath, entry.Name())
+			f, err := os.Open(fullPath)
+			if err != nil {
+				log.Fatal(err)
+			}
+			procesaArchivo(f, conn)
+			defer f.Close()
+		}
+	}
+}
+
+func procesaArchivo(f *os.File, conn *pgx.Conn) {
 	csvReader := csv.NewReader(f)
 	csvReader.Comma = '|'
 	data, err := csvReader.ReadAll()
@@ -121,21 +139,8 @@ func main() {
 		}
 		bar.Increment()
 	}
-	defer f.Close()
 
 	bar.Finish()
 	end := time.Now()
 	log.Println("Time elapsed:", end.Sub(start))
-}
-
-func slqSentence(format string, tramite database.Tramite) (string, error) {
-	t, err := template.New("fstring").Parse(format)
-	if err != nil {
-		return "", fmt.Errorf("error creating template: %v", err)
-	}
-	output := new(bytes.Buffer)
-	if err := t.Execute(output, tramite); err != nil {
-		return "", fmt.Errorf("error executing template: %v", err)
-	}
-	return output.String(), nil
 }
