@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cheggaaa/pb/v3"
 	"github.com/jstoledano/CECyRDIngestionTool/database"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -24,7 +25,7 @@ func main() {
 	}
 
 	// Open the csv file
-	f, err := os.Open("data/01.csv")
+	f, err := os.Open("data/01.Trámites_Tlax_01Septiembre-30Noviembre2021.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -38,6 +39,9 @@ func main() {
 	loc, _ := time.LoadLocation("America/Mexico_City")
 	layout := "02/01/2006 03:04:05 PM"
 
+	log.Println("Processing", len(data), "records")
+	bar := pb.StartNew(len(data))
+	start := time.Now()
 	for _, row := range data {
 		t := database.Record{}
 		t.Folio = row[0]
@@ -69,55 +73,55 @@ func main() {
 		t.TramoExitoso = t.FechaExitoso.Sub(t.FechaTramite)
 
 		err := upsertRecord(db, t)
+		bar.Increment()
 		if err != nil {
 			log.Fatal("Error al procesar ", t.Folio, " -- ", err)
 		}
 	}
 	defer f.Close()
+
+	bar.Finish()
+	end := time.Now()
+
+	log.Println("Time elapsed:", end.Sub(start))
 }
 
 func upsertRecord(db *gorm.DB, t database.Record) error {
-	log.Println("Processing record", t.Folio)
 	tx := db.Begin()
-	err := tx.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "folio"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"estatus",
-			"causa_rechazo",
-			"movimiento_solicitado",
-			"movimiento_definitivo",
-			"fecha_tramite",
-			"fecha_recibido_cecyrd",
-			"fecha_registrado_cecyrd",
-			"fecha_rechazado",
-			"fecha_cancelado_movimiento_posterior",
-			"fecha_alta_pe",
-			"fecha_afectacion_padron",
-			"fecha_actualizacion_pe",
-			"fecha_reincorporacion_pe",
-			"fecha_exitoso",
-			"fecha_lote_produccion",
-			"fecha_listo_reimpresion",
-			"fecha_cpv_creada",
-			"fecha_cpv_registrada_mac",
-			"fecha_cpv_disponible",
-			"fecha_cpv_entregada",
-			"fecha_afectacion_ln",
-			"distrito",
-			"mac",
-			"tramo_disponible",
-			"tramo_entrega",
-			"tramo_exitoso",
-		}),
-	}).Create(&t).Error
 
-	if err != nil {
+	if err := tx.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "folio"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"estatus":                              t.Estatus,
+			"causa_rechazo":                        t.CausaRechazo,
+			"movimiento_solicitado":                t.MovimientoSolicitado,
+			"movimiento_definitivo":                t.MovimientoDefinitivo,
+			"fecha_tramite":                        t.FechaTramite,
+			"fecha_recibido_cecyrd":                t.FechaRecibidoCecyrd,
+			"fecha_registrado_cecyrd":              t.FechaRegistradoCecyrd,
+			"fecha_rechazado":                      t.FechaRechazado,
+			"fecha_cancelado_movimiento_posterior": t.FechaCanceladoMovimientoPosterior,
+			"fecha_alta_pe":                        t.FechaAltaPe,
+			"fecha_afectacion_padron":              t.FechaAfectacionPadron,
+			"fecha_actualizacion_pe":               t.FechaActualizacionPe,
+			"fecha_reincorporacion_pe":             t.FechaReincorporacionPe,
+			"fecha_exitoso":                        t.FechaExitoso,
+			"fecha_lote_produccion":                t.FechaLoteProduccion,
+			"fecha_listo_reimpresion":              t.FechaListoReimpresion,
+			"fecha_cpv_creada":                     t.FechaCpvCreada,
+			"fecha_cpv_registrada_mac":             t.FechaCpvRegistradaMac,
+			"fecha_cpv_disponible":                 t.FechaCpvDisponible,
+			"fecha_cpv_entregada":                  t.FechaCpvEntregada,
+			"fecha_afectacion_ln":                  t.FechaAfectacionLn,
+			"distrito":                             t.Distrito,
+			"mac":                                  t.Mac,
+			"tramo_disponible":                     t.TramoDisponible,
+			"tramo_entrega":                        t.TramoEntrega,
+			"tramo_exitoso":                        t.TramoExitoso}),
+	}).Create(&t).Error; err != nil {
 		tx.Rollback()
 		log.Println("Error al procesar ", t.Folio, " -- ", err)
-		return err
 	}
-
-	log.Println("Record", t.Folio, "processed")
 	tx.Commit()
 	return nil
 }
